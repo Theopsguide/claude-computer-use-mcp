@@ -1,6 +1,9 @@
 {
   "name": "claude-computer-use-mcp",
   "version": "1.0.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/Theopsguide/claude-computer-use-mcp.git"
@@ -10,7 +13,22 @@
   },
   "homepage": "https://github.com/Theopsguide/claude-computer-use-mcp#readme",
   "main": "dist/index.js",
+  "bin": {
+    "claude-computer-use-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE",
+    "API.md",
+    "USAGE.md",
+    "EXAMPLES.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
+    "prepublishOnly": "npm run build",
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",

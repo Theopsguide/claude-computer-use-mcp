@@ -1,0 +1,35 @@
+# Source files
+src/
+*.ts
+
+# Test files
+test-*.js
+test-*.sh
+TESTING.md
+
+# Development files
+tsconfig.json
+.gitignore
+.git/
+CONTRIBUTING.md
+PUSH_INSTRUCTIONS.md
+CHANGELOG.md
+
+# IDE and system files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
