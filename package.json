@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lukethompson/claude-computer-use-mcp.git"
+    "url": "https://github.com/Theopsguide/claude-computer-use-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/lukethompson/claude-computer-use-mcp/issues"
+    "url": "https://github.com/Theopsguide/claude-computer-use-mcp/issues"
   },
-  "homepage": "https://github.com/lukethompson/claude-computer-use-mcp#readme",
+  "homepage": "https://github.com/Theopsguide/claude-computer-use-mcp#readme",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

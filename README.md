@@ -50,7 +50,7 @@ This server allows Claude Code to:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/claude-computer-use-mcp.git
+git clone https://github.com/Theopsguide/claude-computer-use-mcp.git
 cd claude-computer-use-mcp
 ```
 
