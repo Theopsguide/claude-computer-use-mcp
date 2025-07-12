@@ -1,6 +1,23 @@
-import { BrowserController } from './browser-controller';
+import { BrowserController } from './browser-controller.js';
+import {
+  BrowserTools,
+  BrowserLaunchArgs,
+  NavigateArgs,
+  ScreenshotArgs,
+  ClickArgs,
+  TypeArgs,
+  SelectArgs,
+  WaitArgs,
+  ExecuteArgs,
+  GetTextArgs,
+  GetAttributeArgs,
+  GetUrlArgs,
+  GetTitleArgs,
+  CloseArgs,
+  ListSessionsArgs
+} from './types.js';
 
-export function createTools(browserController: BrowserController) {
+export function createTools(browserController: BrowserController): BrowserTools {
   return {
     browser_launch: {
       description: 'Launch a new browser instance',
@@ -14,7 +31,7 @@ export function createTools(browserController: BrowserController) {
           }
         }
       },
-      handler: async (args: any) => {
+      handler: async (args: BrowserLaunchArgs) => {
         const { headless = true } = args;
         const sessionId = await browserController.createSession(headless);
         return {
@@ -34,7 +51,7 @@ export function createTools(browserController: BrowserController) {
         },
         required: ['sessionId', 'url']
       },
-      handler: async (args: any) => {
+      handler: async (args: NavigateArgs) => {
         const { sessionId, url } = args;
         await browserController.navigate(sessionId, url);
         return { success: true, url };
@@ -55,7 +72,7 @@ export function createTools(browserController: BrowserController) {
         },
         required: ['sessionId']
       },
-      handler: async (args: any) => {
+      handler: async (args: ScreenshotArgs) => {
         const { sessionId, fullPage = false } = args;
         const screenshot = await browserController.screenshot(sessionId, fullPage);
         return {
@@ -75,7 +92,7 @@ export function createTools(browserController: BrowserController) {
         },
         required: ['sessionId', 'selector']
       },
-      handler: async (args: any) => {
+      handler: async (args: ClickArgs) => {
         const { sessionId, selector } = args;
         await browserController.click(sessionId, selector);
         return { success: true, selector };
@@ -93,7 +110,7 @@ export function createTools(browserController: BrowserController) {
         },
         required: ['sessionId', 'selector', 'text']
       },
-      handler: async (args: any) => {
+      handler: async (args: TypeArgs) => {
         const { sessionId, selector, text } = args;
         await browserController.type(sessionId, selector, text);
         return { success: true, selector, text };
@@ -111,7 +128,7 @@ export function createTools(browserController: BrowserController) {
         },
         required: ['sessionId', 'selector', 'value']
       },
-      handler: async (args: any) => {
+      handler: async (args: SelectArgs) => {
         const { sessionId, selector, value } = args;
         await browserController.selectOption(sessionId, selector, value);
         return { success: true, selector, value };
@@ -133,7 +150,7 @@ export function createTools(browserController: BrowserController) {
         },
         required: ['sessionId', 'selector']
       },
-      handler: async (args: any) => {
+      handler: async (args: WaitArgs) => {
         const { sessionId, selector, timeout = 30000 } = args;
         await browserController.waitForSelector(sessionId, selector, timeout);
         return { success: true, selector };
@@ -150,7 +167,7 @@ export function createTools(browserController: BrowserController) {
         },
         required: ['sessionId', 'script']
       },
-      handler: async (args: any) => {
+      handler: async (args: ExecuteArgs) => {
         const { sessionId, script } = args;
         const result = await browserController.evaluate(sessionId, script);
         return { result };
@@ -167,7 +184,7 @@ export function createTools(browserController: BrowserController) {
         },
         required: ['sessionId', 'selector']
       },
-      handler: async (args: any) => {
+      handler: async (args: GetTextArgs) => {
         const { sessionId, selector } = args;
         const text = await browserController.getText(sessionId, selector);
         return { text };
@@ -185,7 +202,7 @@ export function createTools(browserController: BrowserController) {
         },
         required: ['sessionId', 'selector', 'attribute']
       },
-      handler: async (args: any) => {
+      handler: async (args: GetAttributeArgs) => {
         const { sessionId, selector, attribute } = args;
         const value = await browserController.getAttribute(sessionId, selector, attribute);
         return { value };
@@ -201,7 +218,7 @@ export function createTools(browserController: BrowserController) {
         },
         required: ['sessionId']
       },
-      handler: async (args: any) => {
+      handler: async (args: GetUrlArgs) => {
         const { sessionId } = args;
         const url = await browserController.getUrl(sessionId);
         return { url };
@@ -217,7 +234,7 @@ export function createTools(browserController: BrowserController) {
         },
         required: ['sessionId']
       },
-      handler: async (args: any) => {
+      handler: async (args: GetTitleArgs) => {
         const { sessionId } = args;
         const title = await browserController.getTitle(sessionId);
         return { title };
@@ -230,8 +247,8 @@ export function createTools(browserController: BrowserController) {
         type: 'object',
         properties: {}
       },
-      handler: async () => {
-        const sessions = browserController.listSessions();
+      handler: async (_args: ListSessionsArgs) => {
+        const sessions = await browserController.listSessions();
         return { sessions };
       }
     },
@@ -245,7 +262,7 @@ export function createTools(browserController: BrowserController) {
         },
         required: ['sessionId']
       },
-      handler: async (args: any) => {
+      handler: async (args: CloseArgs) => {
         const { sessionId } = args;
         await browserController.closeSession(sessionId);
         return { success: true, message: `Session ${sessionId} closed` };

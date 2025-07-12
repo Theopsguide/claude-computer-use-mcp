@@ -48,6 +48,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires system dependencies for Playwright browsers
 - Browser functionality needs `sudo npx playwright install-deps` on Linux/WSL
 
+## [1.1.0] - 2025-01-11
+
+### Security Enhancements
+- **CRITICAL**: Disabled arbitrary JavaScript execution by default (CVE pending)
+- Added comprehensive input validation for all user inputs
+- Implemented URL validation to prevent navigation to local files and internal IPs
+- Added CSS selector validation to prevent XSS attacks
+- Introduced configurable security policies via environment variables
+- Replaced predictable sequential session IDs with cryptographically secure random IDs
+
+### Added
+- New type definitions file (`types.ts`) with complete TypeScript interfaces
+- Input validation module (`validation.ts`) with security-focused validators
+- Configuration module (`config.ts`) with environment variable support
+- Session timeout and automatic cleanup (30-minute default)
+- Maximum session limit to prevent resource exhaustion (10 sessions default)
+- Rate limiting for session creation
+- Enhanced error handling for all async operations
+- Process-level error handlers for uncaught exceptions and rejections
+
+### Changed
+- **BREAKING**: JavaScript execution via `browser_execute` now disabled by default
+  - Enable with `ALLOW_JAVASCRIPT_EXECUTION=true` environment variable
+- **BREAKING**: `listSessions()` is now async and returns actual page titles
+- Replaced all `any` types with proper TypeScript interfaces
+- Updated browser launch arguments for better security
+- Enhanced error messages with more context
+- Improved browser context security headers
+
+### Fixed
+- Memory leaks from unclosed browser sessions on errors
+- Missing error handling in all async functions
+- Type safety issues throughout the codebase
+- Potential null reference errors
+- Race conditions in session management
+- Missing await for async listSessions call
+
+### Environment Variables
+- `ALLOW_JAVASCRIPT_EXECUTION` - Enable JavaScript execution (default: false)
+- `MAX_SESSIONS` - Maximum concurrent sessions (default: 10, max: 100)
+- `SESSION_TIMEOUT` - Session timeout in milliseconds (default: 1800000, max: 3600000)
+
 ## [Unreleased]
 
 ### Planned Features

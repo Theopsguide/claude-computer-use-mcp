@@ -7,9 +7,10 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { BrowserController } from './browser-controller.js';
 import { createTools } from './tools.js';
+import { BrowserTools } from './types.js';
 
 const browserController = new BrowserController();
-const tools = createTools(browserController);
+const tools: BrowserTools = createTools(browserController);
 
 const server = new Server(
   {
@@ -38,13 +39,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   
-  const tool = tools[name as keyof typeof tools];
+  const tool = tools[name as keyof BrowserTools];
   if (!tool) {
-    throw new Error(`Unknown tool: ${name}`);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error: Unknown tool: ${name}`,
+        },
+      ],
+      isError: true,
+    };
   }
   
   try {
-    const result = await tool.handler(args || {});
+    // Type assertion is safe here because we validate tools exist
+    const result = await (tool.handler as any)(args || {});
     return {
       content: [
         {
@@ -68,20 +78,57 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Cleanup on shutdown
 process.on('SIGINT', async () => {
-  await browserController.closeAllSessions();
-  process.exit(0);
+  try {
+    await browserController.closeAllSessions();
+  } catch (error) {
+    console.error('Error closing sessions on SIGINT:', error);
+  } finally {
+    process.exit(0);
+  }
 });
 
 process.on('SIGTERM', async () => {
-  await browserController.closeAllSessions();
-  process.exit(0);
+  try {
+    await browserController.closeAllSessions();
+  } catch (error) {
+    console.error('Error closing sessions on SIGTERM:', error);
+  } finally {
+    process.exit(0);
+  }
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', async (error) => {
+  console.error('Uncaught exception:', error);
+  try {
+    await browserController.closeAllSessions();
+  } catch (closeError) {
+    console.error('Error closing sessions after uncaught exception:', closeError);
+  }
+  process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', async (reason, promise) => {
+  console.error('Unhandled rejection at:', promise, 'reason:', reason);
+  try {
+    await browserController.closeAllSessions();
+  } catch (error) {
+    console.error('Error closing sessions after unhandled rejection:', error);
+  }
+  process.exit(1);
 });
 
 // Start the server
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error('Claude Computer Use MCP Server started');
+async function main(): Promise<void> {
+  try {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error('Claude Computer Use MCP Server started');
+  } catch (error) {
+    console.error('Failed to connect transport:', error);
+    throw error;
+  }
 }
 
 main().catch((error) => {
