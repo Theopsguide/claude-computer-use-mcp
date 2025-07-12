@@ -5,6 +5,34 @@ All notable changes to the Claude Computer Use MCP Server will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-07-12
+
+### Added
+- **USE_CASES.md**: 50+ real-world use cases and practical examples
+- **CONTRIBUTING.md**: Comprehensive contribution guidelines
+- **WINDOWS_PLAYWRIGHT_SETUP.md**: Windows-specific setup instructions  
+- **FINAL_DEPENDENCY_FIX.md**: Targeted dependency troubleshooting
+- **Enhanced README.md**: Badges, better formatting, comprehensive setup guide
+- **WSL Integration**: Configuration for Windows + WSL environments
+- **Complete documentation suite**: Setup guides, troubleshooting, examples
+
+### Changed
+- **package.json**: Added `"type": "module"` for ES module compatibility
+- **Version bump**: 1.0.0 → 1.1.0 for new features and documentation
+- **Configuration examples**: Updated with WSL and cross-platform support
+- **README structure**: Complete redesign with better navigation and examples
+
+### Fixed
+- **TypeScript module configuration**: Resolved ES module import warnings
+- **Cross-platform compatibility**: Better support for Windows, macOS, and Linux
+- **Dependency documentation**: Clear installation steps for all required libraries
+- **WSL browser automation**: Configuration for Windows Claude Desktop + WSL Playwright
+
+### Security
+- All existing security features maintained and documented
+- Added security best practices to contribution guidelines
+- Enhanced input validation documentation
+
 ## [1.0.0] - 2025-01-11
 
 ### Added
