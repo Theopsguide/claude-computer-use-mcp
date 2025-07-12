@@ -1,6 +1,7 @@
 {
   "name": "claude-computer-use-mcp",
   "version": "1.0.0",
+  "type": "module",
   "publishConfig": {
     "access": "public"
   },
