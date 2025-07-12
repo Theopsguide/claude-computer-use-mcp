@@ -43,7 +43,7 @@ After pushing, go to your repository settings and:
 
 ### 4. Update README if needed
 
-If your GitHub username is different from "lukethompson", update the URLs in:
+If your GitHub username is different from "Theopsguide", update the URLs in:
 - README.md (clone URL)
 - package.json (repository URLs)
 

@@ -16,11 +16,18 @@ export const SECURITY_CONFIG: SecurityConfig = {
   // Session management
   maxSessions: 10, // Max concurrent browser sessions
   sessionTimeout: 30 * 60 * 1000, // 30 minutes
+  
+  // Rate limiting
+  maxSessionsPerMinute: 5, // Max 5 new sessions per minute
+  maxSessionsPerHour: 20, // Max 20 new sessions per hour
 };
 
 // Allow environment variable overrides for configuration
-if (process.env.ALLOW_JAVASCRIPT_EXECUTION === 'true') {
-  console.warn('WARNING: JavaScript execution is enabled. This poses security risks.');
+// SECURITY: JavaScript execution is disabled by default and strongly discouraged
+if (process.env.ALLOW_JAVASCRIPT_EXECUTION === 'true' && process.env.I_UNDERSTAND_THE_SECURITY_RISKS === 'true') {
+  console.error('⚠️  WARNING: JavaScript execution is ENABLED. This poses SEVERE SECURITY RISKS!');
+  console.error('⚠️  This allows arbitrary code execution in the browser context.');
+  console.error('⚠️  Only enable this if you fully understand and accept the risks.');
   SECURITY_CONFIG.allowJavaScriptExecution = true;
 }
 

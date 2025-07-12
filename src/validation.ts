@@ -1,5 +1,27 @@
 import { DEFAULT_SECURITY_CONFIG, SecurityConfig } from './types.js';
 
+// Performance optimization: cache compiled regex patterns
+const DANGEROUS_SCRIPT_PATTERNS = [
+  /require\s*\(/i,
+  /import\s+/i,
+  /eval\s*\(/i,
+  /Function\s*\(/i,
+  /setTimeout\s*\(/i,
+  /setInterval\s*\(/i,
+  /XMLHttpRequest/i,
+  /fetch\s*\(/i,
+  /\.constructor\s*\(/i,
+  /__proto__/i,
+  /process\./i,
+  /child_process/i,
+  /fs\./i,
+  /readFile/i,
+  /writeFile/i,
+];
+
+// Cached regex for session ID validation
+const SESSION_ID_PATTERN = /^session-[a-f0-9]{32}$/;
+
 export class ValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -37,16 +59,56 @@ export function validateUrl(url: string, config: SecurityConfig = DEFAULT_SECURI
     throw new SecurityError('Navigation to local files is not allowed');
   }
 
-  // Prevent navigation to internal IPs (basic check)
+  // Prevent navigation to internal IPs and loopback addresses
   const hostname = parsedUrl.hostname;
-  if (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname.startsWith('192.168.') ||
-    hostname.startsWith('10.') ||
-    hostname.startsWith('172.')
-  ) {
-    throw new SecurityError('Navigation to internal IP addresses is not allowed');
+  
+  // Check for localhost variations
+  if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
+    throw new SecurityError('Navigation to localhost is not allowed');
+  }
+  
+  // Check if hostname is an IP address
+  const ipv4Pattern = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  const match = hostname.match(ipv4Pattern);
+  
+  if (match) {
+    const [, a, b, c, d] = match.map(Number);
+    
+    // Validate IP octets
+    if ([a, b, c, d].some(octet => octet > 255)) {
+      throw new ValidationError('Invalid IP address');
+    }
+    
+    // Check for loopback (127.0.0.0/8)
+    if (a === 127) {
+      throw new SecurityError('Navigation to loopback addresses is not allowed');
+    }
+    
+    // Check for private IP ranges (RFC1918)
+    // 10.0.0.0/8
+    if (a === 10) {
+      throw new SecurityError('Navigation to private IP addresses (10.0.0.0/8) is not allowed');
+    }
+    
+    // 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+    if (a === 172 && b >= 16 && b <= 31) {
+      throw new SecurityError('Navigation to private IP addresses (172.16.0.0/12) is not allowed');
+    }
+    
+    // 192.168.0.0/16
+    if (a === 192 && b === 168) {
+      throw new SecurityError('Navigation to private IP addresses (192.168.0.0/16) is not allowed');
+    }
+    
+    // Link-local addresses (169.254.0.0/16)
+    if (a === 169 && b === 254) {
+      throw new SecurityError('Navigation to link-local addresses is not allowed');
+    }
+  }
+  
+  // Check for IPv6 loopback and private addresses
+  if (hostname === '::1' || hostname.startsWith('fe80:') || hostname.startsWith('fc00:') || hostname.startsWith('fd00:')) {
+    throw new SecurityError('Navigation to private IPv6 addresses is not allowed');
   }
 }
 
@@ -89,25 +151,7 @@ export function validateScript(script: string, config: SecurityConfig = DEFAULT_
   }
 
   // Basic security checks - these are not comprehensive but catch obvious issues
-  const dangerousPatterns = [
-    /require\s*\(/i,
-    /import\s+/i,
-    /eval\s*\(/i,
-    /Function\s*\(/i,
-    /setTimeout\s*\(/i,
-    /setInterval\s*\(/i,
-    /XMLHttpRequest/i,
-    /fetch\s*\(/i,
-    /\.constructor\s*\(/i,
-    /__proto__/i,
-    /process\./i,
-    /child_process/i,
-    /fs\./i,
-    /readFile/i,
-    /writeFile/i,
-  ];
-
-  for (const pattern of dangerousPatterns) {
+  for (const pattern of DANGEROUS_SCRIPT_PATTERNS) {
     if (pattern.test(script)) {
       throw new SecurityError(`Script contains potentially dangerous pattern: ${pattern}`);
     }
@@ -120,7 +164,7 @@ export function validateSessionId(sessionId: string): void {
   }
 
   // Session IDs should match our expected format (session-[32 hex chars])
-  if (!/^session-[a-f0-9]{32}$/.test(sessionId)) {
+  if (!SESSION_ID_PATTERN.test(sessionId)) {
     throw new ValidationError('Invalid session ID format');
   }
 }

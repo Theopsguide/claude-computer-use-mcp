@@ -53,8 +53,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
   
   try {
-    // Type assertion is safe here because we validate tools exist
-    const result = await (tool.handler as any)(args || {});
+    // Execute the tool handler with the provided arguments
+    // Type assertion is safe here because we validate the tool exists and MCP validates arguments
+    const result = await (tool.handler as (args: any) => Promise<any>)(args || {});
     return {
       content: [
         {

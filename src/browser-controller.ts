@@ -2,6 +2,7 @@ import { Browser, BrowserContext, Page, chromium } from 'playwright';
 import crypto from 'crypto';
 import { SecurityConfig } from './types.js';
 import { SECURITY_CONFIG } from './config.js';
+import { CookieManager } from './cookie-manager.js';
 import { 
   validateUrl, 
   validateSelector, 
@@ -26,54 +27,141 @@ export class BrowserController {
   private sessions: Map<string, BrowserSession> = new Map();
   private securityConfig: SecurityConfig;
   private sessionCreationTimes: Map<string, number> = new Map();
+  private cookieManager: CookieManager;
+  private cleanupInterval?: NodeJS.Timeout;
+  // Rate limiting tracking
+  private sessionCreationHistory: number[] = [];
+  // Session creation lock to prevent race conditions
+  private sessionCreationLock = false;
 
   constructor(securityConfig: SecurityConfig = SECURITY_CONFIG) {
     this.securityConfig = securityConfig;
     
+    try {
+      this.cookieManager = new CookieManager();
+      
+      // Initialize cookie manager asynchronously
+      this.cookieManager.initialize().catch(error => {
+        console.error('Failed to initialize cookie manager:', error);
+      });
+    } catch (error) {
+      throw new Error(`Failed to create browser controller: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+    
     // Cleanup old sessions periodically
-    setInterval(() => this.cleanupExpiredSessions(), 60000); // Every minute
+    this.cleanupInterval = setInterval(() => this.cleanupExpiredSessions(), 60000); // Every minute
   }
 
   private generateSecureSessionId(): string {
     return `session-${crypto.randomBytes(16).toString('hex')}`;
   }
 
-  private cleanupExpiredSessions(): void {
+  private checkRateLimit(): void {
+    const now = Date.now();
+    const oneMinuteAgo = now - 60 * 1000; // 1 minute ago
+    const oneHourAgo = now - 60 * 60 * 1000; // 1 hour ago
+    
+    // Clean up old entries
+    this.sessionCreationHistory = this.sessionCreationHistory.filter(
+      timestamp => timestamp > oneHourAgo
+    );
+    
+    // Count recent sessions
+    const sessionsInLastMinute = this.sessionCreationHistory.filter(
+      timestamp => timestamp > oneMinuteAgo
+    ).length;
+    
+    const sessionsInLastHour = this.sessionCreationHistory.length;
+    
+    // Check rate limits
+    if (sessionsInLastMinute >= this.securityConfig.maxSessionsPerMinute) {
+      throw new SecurityError(
+        `Rate limit exceeded: too many sessions created in the last minute (max: ${this.securityConfig.maxSessionsPerMinute})`
+      );
+    }
+    
+    if (sessionsInLastHour >= this.securityConfig.maxSessionsPerHour) {
+      throw new SecurityError(
+        `Rate limit exceeded: too many sessions created in the last hour (max: ${this.securityConfig.maxSessionsPerHour})`
+      );
+    }
+  }
+
+  private recordSessionCreation(): void {
+    this.sessionCreationHistory.push(Date.now());
+  }
+
+  private cleanupPromise: Promise<void> | null = null;
+  
+  private async cleanupExpiredSessions(): Promise<void> {
+    // Prevent concurrent cleanup runs using a promise-based lock
+    if (this.cleanupPromise) {
+      return this.cleanupPromise;
+    }
+    
+    this.cleanupPromise = this.performCleanup();
+    try {
+      await this.cleanupPromise;
+    } finally {
+      this.cleanupPromise = null;
+    }
+  }
+  
+  private async performCleanup(): Promise<void> {
     const now = Date.now();
     const expiredSessions: string[] = [];
     
-    for (const [id, createdTime] of this.sessionCreationTimes.entries()) {
+    // Create a snapshot of session times to avoid race conditions
+    const sessionTimes = Array.from(this.sessionCreationTimes.entries());
+    
+    for (const [id, createdTime] of sessionTimes) {
       if (now - createdTime > this.securityConfig.sessionTimeout) {
         expiredSessions.push(id);
       }
     }
     
-    for (const id of expiredSessions) {
-      this.closeSession(id).catch(err => 
-        console.error(`Failed to cleanup expired session ${id}:`, err)
-      );
-    }
+    // Close expired sessions in parallel but with error handling
+    const cleanupPromises = expiredSessions.map(async (id) => {
+      try {
+        await this.closeSession(id);
+      } catch (err) {
+        console.error(`Failed to cleanup expired session ${id}:`, err);
+      }
+    });
+    
+    await Promise.allSettled(cleanupPromises);
   }
 
   async createSession(headless: boolean = true): Promise<string> {
-    // Check session limit
-    if (this.sessions.size >= this.securityConfig.maxSessions) {
-      throw new SecurityError(
-        `Maximum number of sessions (${this.securityConfig.maxSessions}) reached`
-      );
+    // Prevent concurrent session creation to avoid race conditions
+    if (this.sessionCreationLock) {
+      throw new SecurityError('Session creation in progress, please try again');
     }
-
-    const id = this.generateSecureSessionId();
+    
+    this.sessionCreationLock = true;
     
     try {
+      // Check rate limits first
+      this.checkRateLimit();
+      
+      // Check session limit (with lock held to prevent race conditions)
+      if (this.sessions.size >= this.securityConfig.maxSessions) {
+        throw new SecurityError(
+          `Maximum number of sessions (${this.securityConfig.maxSessions}) reached`
+        );
+      }
+
+      const id = this.generateSecureSessionId();
       const browser = await chromium.launch({
         headless,
         args: [
           '--disable-gpu',
           '--disable-dev-shm-usage',
-          '--disable-web-security',
           '--no-first-run',
-          '--no-default-browser-check'
+          '--no-default-browser-check',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding'
         ]
       });
       
@@ -103,10 +191,13 @@ export class BrowserController {
       });
       
       this.sessionCreationTimes.set(id, Date.now());
+      this.recordSessionCreation(); // Record for rate limiting
       
       return id;
     } catch (error) {
       throw new Error(`Failed to create browser session: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      this.sessionCreationLock = false;
     }
   }
 
@@ -219,14 +310,30 @@ export class BrowserController {
     if (!session) throw new Error(`Session ${sessionId} not found`);
     
     try {
-      // Wrap the script in a try-catch to prevent page crashes
+      // Use Function constructor for safer execution with isolated scope
       const wrappedScript = `
-        try {
-          ${script}
-        } catch (error) {
-          return { error: error.message || 'Script execution failed' };
-        }
+        (function() {
+          'use strict';
+          try {
+            return (function() {
+              ${script}
+            })();
+          } catch (error) {
+            return { 
+              error: error.message || 'Script execution failed',
+              stack: error.stack || 'No stack trace available'
+            };
+          }
+        })()
       `;
+      
+      // Validate the wrapped script can be parsed before execution
+      try {
+        new Function(wrappedScript);
+      } catch (syntaxError) {
+        throw new ValidationError(`Script syntax error: ${syntaxError instanceof Error ? syntaxError.message : 'Unknown error'}`);
+      }
+      
       return await session.page.evaluate(wrappedScript);
     } catch (error) {
       throw new Error(`Failed to execute script: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -317,5 +424,77 @@ export class BrowserController {
     }
     
     return sessionList;
+  }
+
+  async saveCookies(sessionId: string): Promise<void> {
+    const session = this.getSession(sessionId);
+    if (!session) throw new Error(`Session ${sessionId} not found`);
+    
+    try {
+      const cookies = await session.context.cookies();
+      await this.cookieManager.saveCookies(sessionId, cookies);
+    } catch (error) {
+      throw new Error(`Failed to save cookies: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async loadCookies(sessionId: string, targetDomain?: string): Promise<void> {
+    const session = this.getSession(sessionId);
+    if (!session) throw new Error(`Session ${sessionId} not found`);
+    
+    try {
+      const cookies = await this.cookieManager.loadCookies(sessionId, targetDomain);
+      if (cookies.length > 0) {
+        await session.context.addCookies(cookies);
+      }
+    } catch (error) {
+      throw new Error(`Failed to load cookies: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async clearCookies(sessionId: string): Promise<void> {
+    const session = this.getSession(sessionId);
+    if (!session) throw new Error(`Session ${sessionId} not found`);
+    
+    try {
+      // Clear cookies from browser context
+      await session.context.clearCookies();
+      // Clear stored cookies
+      await this.cookieManager.clearCookies(sessionId);
+    } catch (error) {
+      throw new Error(`Failed to clear cookies: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async getCookies(sessionId: string, urls?: string[]): Promise<any[]> {
+    const session = this.getSession(sessionId);
+    if (!session) throw new Error(`Session ${sessionId} not found`);
+    
+    try {
+      const cookies = await session.context.cookies(urls);
+      // Return cookies without sensitive values for security
+      return cookies.map(cookie => ({
+        name: cookie.name,
+        domain: cookie.domain,
+        path: cookie.path,
+        expires: cookie.expires,
+        httpOnly: cookie.httpOnly,
+        secure: cookie.secure,
+        sameSite: cookie.sameSite
+      }));
+    } catch (error) {
+      throw new Error(`Failed to get cookies: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async cleanup(): Promise<void> {
+    // Clear the cleanup interval
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
+    
+    // Close all sessions
+    await this.closeAllSessions();
   }
 }

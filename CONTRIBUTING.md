@@ -10,7 +10,7 @@ By participating in this project, you agree to be respectful and constructive in
 
 ### Reporting Issues
 
-1. Check if the issue already exists in [GitHub Issues](https://github.com/lukethompson/claude-computer-use-mcp/issues)
+1. Check if the issue already exists in [GitHub Issues](https://github.com/Theopsguide/claude-computer-use-mcp/issues)
 2. If not, create a new issue with:
    - Clear title and description
    - Steps to reproduce (if applicable)
@@ -19,7 +19,7 @@ By participating in this project, you agree to be respectful and constructive in
 
 ### Suggesting Features
 
-1. Open a [GitHub Issue](https://github.com/lukethompson/claude-computer-use-mcp/issues) with "Feature Request" label
+1. Open a [GitHub Issue](https://github.com/Theopsguide/claude-computer-use-mcp/issues) with "Feature Request" label
 2. Describe the feature and its use case
 3. Explain why it would benefit users
 

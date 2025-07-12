@@ -69,6 +69,24 @@ export interface ListSessionsArgs {
   // No arguments needed
 }
 
+export interface SaveCookiesArgs {
+  sessionId: string;
+}
+
+export interface LoadCookiesArgs {
+  sessionId: string;
+  domain?: string;
+}
+
+export interface ClearCookiesArgs {
+  sessionId: string;
+}
+
+export interface GetCookiesArgs {
+  sessionId: string;
+  urls?: string[];
+}
+
 export interface ToolHandler<T = any, R = any> {
   description: string;
   inputSchema: unknown;
@@ -90,6 +108,10 @@ export interface BrowserTools {
   browser_get_title: ToolHandler<GetTitleArgs, { title: string }>;
   browser_list_sessions: ToolHandler<ListSessionsArgs, { sessions: Array<{ id: string; url: string; title: string; createdAt: Date }> }>;
   browser_close: ToolHandler<CloseArgs, { success: boolean; message: string }>;
+  browser_save_cookies: ToolHandler<SaveCookiesArgs, { success: boolean; message: string }>;
+  browser_load_cookies: ToolHandler<LoadCookiesArgs, { success: boolean; cookiesLoaded: number }>;
+  browser_clear_cookies: ToolHandler<ClearCookiesArgs, { success: boolean; message: string }>;
+  browser_get_cookies: ToolHandler<GetCookiesArgs, { cookies: any[] }>;
 }
 
 // Security configuration
@@ -101,6 +123,9 @@ export interface SecurityConfig {
   maxSessions: number;
   sessionTimeout: number;
   allowJavaScriptExecution: boolean;
+  // Rate limiting configuration
+  maxSessionsPerMinute: number;
+  maxSessionsPerHour: number;
 }
 
 export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
@@ -111,4 +136,6 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
   maxSessions: 10,
   sessionTimeout: 30 * 60 * 1000, // 30 minutes
   allowJavaScriptExecution: false, // Disabled by default for security
+  maxSessionsPerMinute: 5, // Max 5 new sessions per minute
+  maxSessionsPerHour: 20, // Max 20 new sessions per hour
 };

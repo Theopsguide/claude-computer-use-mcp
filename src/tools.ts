@@ -14,7 +14,11 @@ import {
   GetUrlArgs,
   GetTitleArgs,
   CloseArgs,
-  ListSessionsArgs
+  ListSessionsArgs,
+  SaveCookiesArgs,
+  LoadCookiesArgs,
+  ClearCookiesArgs,
+  GetCookiesArgs
 } from './types.js';
 
 export function createTools(browserController: BrowserController): BrowserTools {
@@ -266,6 +270,80 @@ export function createTools(browserController: BrowserController): BrowserTools 
         const { sessionId } = args;
         await browserController.closeSession(sessionId);
         return { success: true, message: `Session ${sessionId} closed` };
+      }
+    },
+
+    browser_save_cookies: {
+      description: 'Save cookies from the current browser session to encrypted storage',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' }
+        },
+        required: ['sessionId']
+      },
+      handler: async (args: SaveCookiesArgs) => {
+        const { sessionId } = args;
+        await browserController.saveCookies(sessionId);
+        return { success: true, message: `Cookies saved for session ${sessionId}` };
+      }
+    },
+
+    browser_load_cookies: {
+      description: 'Load previously saved cookies into the current browser session',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          domain: { 
+            type: 'string', 
+            description: 'Optional: filter cookies by domain' 
+          }
+        },
+        required: ['sessionId']
+      },
+      handler: async (args: LoadCookiesArgs) => {
+        const { sessionId, domain } = args;
+        await browserController.loadCookies(sessionId, domain);
+        const cookies = await browserController.getCookies(sessionId);
+        return { success: true, cookiesLoaded: cookies.length };
+      }
+    },
+
+    browser_clear_cookies: {
+      description: 'Clear all cookies from the browser session and storage',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' }
+        },
+        required: ['sessionId']
+      },
+      handler: async (args: ClearCookiesArgs) => {
+        const { sessionId } = args;
+        await browserController.clearCookies(sessionId);
+        return { success: true, message: `Cookies cleared for session ${sessionId}` };
+      }
+    },
+
+    browser_get_cookies: {
+      description: 'Get current cookies from the browser session (without values for security)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          urls: { 
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional: filter cookies by URLs' 
+          }
+        },
+        required: ['sessionId']
+      },
+      handler: async (args: GetCookiesArgs) => {
+        const { sessionId, urls } = args;
+        const cookies = await browserController.getCookies(sessionId, urls);
+        return { cookies };
       }
     }
   };
