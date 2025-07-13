@@ -18,10 +18,49 @@ import {
   SaveCookiesArgs,
   LoadCookiesArgs,
   ClearCookiesArgs,
-  GetCookiesArgs
+  GetCookiesArgs,
+  MultiTabArgs,
+  SwitchTabArgs,
+  CloseTabArgs,
+  FormFillArgs,
+  FileUploadArgs,
+  FileDownloadArgs,
+  AdvancedScreenshotArgs,
+  ScrollArgs,
+  DragDropArgs,
+  WaitForNavigationArgs,
+  NetworkLogsArgs,
+  PerformanceMetricsArgs,
+  AccessibilityArgs
 } from './types.js';
 
-export function createTools(browserController: BrowserController): BrowserTools {
+// Enhanced tool interface with all new capabilities
+interface EnhancedBrowserTools extends BrowserTools {
+  // Multi-tab management
+  browser_new_tab: any;
+  browser_switch_tab: any;
+  browser_close_tab: any;
+  browser_list_tabs: any;
+  // Form automation
+  browser_fill_form: any;
+  // File operations
+  browser_upload_file: any;
+  browser_download_file: any;
+  // Advanced screenshot
+  browser_advanced_screenshot: any;
+  // Page interaction
+  browser_scroll: any;
+  browser_drag_drop: any;
+  browser_wait_navigation: any;
+  // Network and performance
+  browser_enable_network_logging: any;
+  browser_get_network_logs: any;
+  browser_get_performance_metrics: any;
+  // Accessibility
+  browser_accessibility_audit: any;
+}
+
+export function createTools(browserController: BrowserController): EnhancedBrowserTools {
   return {
     browser_launch: {
       description: 'Launch a new browser instance',
@@ -344,6 +383,313 @@ export function createTools(browserController: BrowserController): BrowserTools 
         const { sessionId, urls } = args;
         const cookies = await browserController.getCookies(sessionId, urls);
         return { cookies };
+      }
+    },
+
+    // Advanced Multi-Tab Management
+    browser_new_tab: {
+      description: 'Create a new tab in the browser session',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          url: { type: 'string', description: 'Optional URL to navigate to in the new tab' }
+        },
+        required: ['sessionId']
+      },
+      handler: async (args: MultiTabArgs) => {
+        const { sessionId, url } = args;
+        const result = await browserController.createNewTab(sessionId, url);
+        return result;
+      }
+    },
+
+    browser_switch_tab: {
+      description: 'Switch to a specific tab by index',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          tabIndex: { type: 'number', description: 'Index of the tab to switch to (0-based)' }
+        },
+        required: ['sessionId', 'tabIndex']
+      },
+      handler: async (args: SwitchTabArgs) => {
+        const { sessionId, tabIndex } = args;
+        const result = await browserController.switchToTab(sessionId, tabIndex);
+        return result;
+      }
+    },
+
+    browser_close_tab: {
+      description: 'Close a specific tab by index',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          tabIndex: { type: 'number', description: 'Index of the tab to close (0-based)' }
+        },
+        required: ['sessionId', 'tabIndex']
+      },
+      handler: async (args: CloseTabArgs) => {
+        const { sessionId, tabIndex } = args;
+        const result = await browserController.closeTab(sessionId, tabIndex);
+        return result;
+      }
+    },
+
+    browser_list_tabs: {
+      description: 'List all tabs in the browser session',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' }
+        },
+        required: ['sessionId']
+      },
+      handler: async (args: { sessionId: string }) => {
+        const { sessionId } = args;
+        const tabs = await browserController.listTabs(sessionId);
+        return { tabs };
+      }
+    },
+
+    // Form Automation
+    browser_fill_form: {
+      description: 'Fill multiple form fields at once and optionally submit',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          formData: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                selector: { type: 'string', description: 'CSS selector for the form field' },
+                value: { type: 'string', description: 'Value to enter in the field' },
+                type: { 
+                  type: 'string', 
+                  enum: ['text', 'email', 'password', 'number', 'tel', 'url', 'search'],
+                  description: 'Type of input field' 
+                }
+              },
+              required: ['selector', 'value']
+            },
+            description: 'Array of form fields to fill'
+          },
+          submitSelector: { type: 'string', description: 'Optional CSS selector for submit button' }
+        },
+        required: ['sessionId', 'formData']
+      },
+      handler: async (args: FormFillArgs) => {
+        const { sessionId, formData, submitSelector } = args;
+        // Convert object to array format if needed
+        const formArray = Array.isArray(formData) ? formData : 
+          Object.entries(formData).map(([selector, value]) => ({ selector, value }));
+        const result = await browserController.fillForm(sessionId, formArray, submitSelector);
+        return result;
+      }
+    },
+
+    // File Operations
+    browser_upload_file: {
+      description: 'Upload a file through a file input element',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          fileSelector: { type: 'string', description: 'CSS selector for the file input element' },
+          filePath: { type: 'string', description: 'Path to the file to upload' }
+        },
+        required: ['sessionId', 'fileSelector', 'filePath']
+      },
+      handler: async (args: FileUploadArgs) => {
+        const { sessionId, fileSelector, filePath } = args;
+        const result = await browserController.uploadFile(sessionId, fileSelector, filePath);
+        return result;
+      }
+    },
+
+    browser_download_file: {
+      description: 'Download a file by clicking a download link',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          downloadSelector: { type: 'string', description: 'CSS selector for the download link/button' },
+          downloadPath: { type: 'string', description: 'Optional path to save the downloaded file' }
+        },
+        required: ['sessionId', 'downloadSelector']
+      },
+      handler: async (args: FileDownloadArgs) => {
+        const { sessionId, downloadSelector, downloadPath } = args;
+        const result = await browserController.downloadFile(sessionId, downloadSelector, downloadPath);
+        return result;
+      }
+    },
+
+    // Advanced Screenshot
+    browser_advanced_screenshot: {
+      description: 'Take advanced screenshots with element selection, quality control, and clipping',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          element: { type: 'string', description: 'Optional CSS selector to screenshot specific element' },
+          quality: { type: 'number', minimum: 1, maximum: 100, description: 'JPEG quality (1-100, default: 90)' },
+          format: { type: 'string', enum: ['png', 'jpeg'], description: 'Image format (default: png)' },
+          clip: {
+            type: 'object',
+            properties: {
+              x: { type: 'number', description: 'X coordinate of clipping area' },
+              y: { type: 'number', description: 'Y coordinate of clipping area' },
+              width: { type: 'number', description: 'Width of clipping area' },
+              height: { type: 'number', description: 'Height of clipping area' }
+            },
+            required: ['x', 'y', 'width', 'height'],
+            description: 'Optional clipping rectangle'
+          }
+        },
+        required: ['sessionId']
+      },
+      handler: async (args: AdvancedScreenshotArgs) => {
+        const { sessionId, element, quality, format, clip } = args;
+        const result = await browserController.takeAdvancedScreenshot(sessionId, {
+          element, quality, format, clip
+        });
+        return result;
+      }
+    },
+
+    // Page Interaction
+    browser_scroll: {
+      description: 'Scroll the page in a specific direction',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          direction: { 
+            type: 'string', 
+            enum: ['up', 'down', 'left', 'right'],
+            description: 'Direction to scroll' 
+          },
+          distance: { type: 'number', description: 'Distance to scroll in pixels (default: 500)' }
+        },
+        required: ['sessionId', 'direction']
+      },
+      handler: async (args: ScrollArgs) => {
+        const { sessionId, direction, distance } = args;
+        const result = await browserController.scroll(sessionId, direction, distance);
+        return result;
+      }
+    },
+
+    browser_drag_drop: {
+      description: 'Drag and drop an element to another element',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          sourceSelector: { type: 'string', description: 'CSS selector for the element to drag' },
+          targetSelector: { type: 'string', description: 'CSS selector for the drop target' }
+        },
+        required: ['sessionId', 'sourceSelector', 'targetSelector']
+      },
+      handler: async (args: DragDropArgs) => {
+        const { sessionId, sourceSelector, targetSelector } = args;
+        const result = await browserController.dragAndDrop(sessionId, sourceSelector, targetSelector);
+        return result;
+      }
+    },
+
+    browser_wait_navigation: {
+      description: 'Wait for page navigation to complete',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          timeout: { type: 'number', description: 'Timeout in milliseconds (default: 30000)' },
+          waitUntil: {
+            type: 'string',
+            enum: ['load', 'domcontentloaded', 'networkidle'],
+            description: 'When to consider navigation finished (default: load)'
+          }
+        },
+        required: ['sessionId']
+      },
+      handler: async (args: WaitForNavigationArgs) => {
+        const { sessionId, timeout, waitUntil } = args;
+        const result = await browserController.waitForNavigation(sessionId, timeout, waitUntil);
+        return result;
+      }
+    },
+
+    // Network and Performance
+    browser_enable_network_logging: {
+      description: 'Enable network request logging for the session',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' }
+        },
+        required: ['sessionId']
+      },
+      handler: async (args: { sessionId: string }) => {
+        const { sessionId } = args;
+        const result = await browserController.enableNetworkLogging(sessionId);
+        return result;
+      }
+    },
+
+    browser_get_network_logs: {
+      description: 'Get network request logs for the session',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          includeHeaders: { type: 'boolean', description: 'Include request/response headers (default: false)' }
+        },
+        required: ['sessionId']
+      },
+      handler: async (args: NetworkLogsArgs) => {
+        const { sessionId, includeHeaders } = args;
+        const logs = await browserController.getNetworkLogs(sessionId, includeHeaders);
+        return { logs };
+      }
+    },
+
+    browser_get_performance_metrics: {
+      description: 'Get performance metrics for the current page',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' }
+        },
+        required: ['sessionId']
+      },
+      handler: async (args: PerformanceMetricsArgs) => {
+        const { sessionId } = args;
+        const metrics = await browserController.getPerformanceMetrics(sessionId);
+        return { metrics };
+      }
+    },
+
+    // Accessibility
+    browser_accessibility_audit: {
+      description: 'Run accessibility audit on the page or specific element',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Browser session ID' },
+          selector: { type: 'string', description: 'Optional CSS selector to audit specific element' }
+        },
+        required: ['sessionId']
+      },
+      handler: async (args: AccessibilityArgs) => {
+        const { sessionId, selector } = args;
+        const audit = await browserController.runAccessibilityAudit(sessionId, selector);
+        return { audit };
       }
     }
   };

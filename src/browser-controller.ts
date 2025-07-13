@@ -1,8 +1,10 @@
 import { Browser, BrowserContext, Page, chromium } from 'playwright';
 import crypto from 'crypto';
 import { SecurityConfig } from './types.js';
-import { SECURITY_CONFIG } from './config.js';
+import { SECURITY_CONFIG, ENTERPRISE_CONFIG } from './config.js';
 import { CookieManager } from './cookie-manager.js';
+import { monitoring, monitored } from './monitoring.js';
+import { AdvancedBrowserController } from './advanced-browser.js';
 import { 
   validateUrl, 
   validateSelector, 
@@ -33,12 +35,23 @@ export class BrowserController {
   private sessionCreationHistory: number[] = [];
   // Session creation lock to prevent race conditions
   private sessionCreationLock = false;
+  // Advanced browser features
+  private advancedController: AdvancedBrowserController;
+  // Request interception
+  private interceptedSessions = new Set<string>();
 
   constructor(securityConfig: SecurityConfig = SECURITY_CONFIG) {
     this.securityConfig = securityConfig;
+    this.advancedController = new AdvancedBrowserController(this.sessions);
     
     try {
       this.cookieManager = new CookieManager();
+      
+      // Initialize monitoring if enabled
+      if (securityConfig.enableMetrics || securityConfig.enableAuditLogging) {
+        monitoring.enableMetrics = securityConfig.enableMetrics;
+        monitoring.enableAuditLogging = securityConfig.enableAuditLogging;
+      }
       
       // Initialize cookie manager asynchronously
       this.cookieManager.initialize().catch(error => {
@@ -165,22 +178,49 @@ export class BrowserController {
         ]
       });
       
-      const context = await browser.newContext({
+      const contextOptions: any = {
         viewport: { width: 1280, height: 720 },
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         // Security headers
         extraHTTPHeaders: {
           'X-Frame-Options': 'DENY',
-          'X-Content-Type-Options': 'nosniff'
+          'X-Content-Type-Options': 'nosniff',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin'
         },
         // Disable permissions
         permissions: [],
-        // Block certain resource types for security
-        // Note: This is commented out to maintain functionality but can be enabled for stricter security
-        // blockResources: ['image', 'font', 'stylesheet']
-      });
+        // Enhanced security settings
+        ignoreHTTPSErrors: false,
+        bypassCSP: false
+      };
+
+      // Add Content Security Policy if enabled
+      if (this.securityConfig.enableContentSecurityPolicy) {
+        contextOptions.extraHTTPHeaders['Content-Security-Policy'] = 
+          "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;";
+      }
+
+      const context = await browser.newContext(contextOptions);
       
       const page = await context.newPage();
+      
+      // Enable request interception if configured
+      if (this.securityConfig.enableRequestInterception) {
+        await this.enableRequestInterception(id, page);
+      }
+      
+      // Set up performance monitoring
+      if (this.securityConfig.enableMetrics) {
+        page.on('load', () => {
+          monitoring.auditLog({
+            level: 'info',
+            sessionId: id,
+            action: 'page_loaded',
+            details: { url: page.url() }
+          });
+        });
+      }
       
       this.sessions.set(id, {
         id,
@@ -192,6 +232,13 @@ export class BrowserController {
       
       this.sessionCreationTimes.set(id, Date.now());
       this.recordSessionCreation(); // Record for rate limiting
+      
+      monitoring.auditLog({
+        level: 'info',
+        sessionId: id,
+        action: 'session_created',
+        details: { headless, timestamp: Date.now() }
+      });
       
       return id;
     } catch (error) {
@@ -487,6 +534,103 @@ export class BrowserController {
     }
   }
 
+  // Advanced browser features delegation
+  async createNewTab(sessionId: string, url?: string) {
+    return this.advancedController.createNewTab(sessionId, url);
+  }
+  
+  async switchToTab(sessionId: string, tabIndex: number) {
+    return this.advancedController.switchToTab(sessionId, tabIndex);
+  }
+  
+  async closeTab(sessionId: string, tabIndex: number) {
+    return this.advancedController.closeTab(sessionId, tabIndex);
+  }
+  
+  async listTabs(sessionId: string) {
+    return this.advancedController.listTabs(sessionId);
+  }
+  
+  async fillForm(sessionId: string, formData: any[], submitSelector?: string) {
+    return this.advancedController.fillForm(sessionId, formData, submitSelector);
+  }
+  
+  async uploadFile(sessionId: string, fileSelector: string, filePath: string) {
+    return this.advancedController.uploadFile(sessionId, fileSelector, filePath);
+  }
+  
+  async downloadFile(sessionId: string, downloadSelector: string, downloadPath?: string) {
+    return this.advancedController.downloadFile(sessionId, downloadSelector, downloadPath);
+  }
+  
+  async takeAdvancedScreenshot(sessionId: string, options: any = {}) {
+    return this.advancedController.takeAdvancedScreenshot(sessionId, options);
+  }
+  
+  async scroll(sessionId: string, direction: any, distance?: number) {
+    return this.advancedController.scroll(sessionId, direction, distance);
+  }
+  
+  async dragAndDrop(sessionId: string, sourceSelector: string, targetSelector: string) {
+    return this.advancedController.dragAndDrop(sessionId, sourceSelector, targetSelector);
+  }
+  
+  async waitForNavigation(sessionId: string, timeout?: number, waitUntil?: any) {
+    return this.advancedController.waitForNavigation(sessionId, timeout, waitUntil);
+  }
+  
+  async enableNetworkLogging(sessionId: string) {
+    return this.advancedController.enableNetworkLogging(sessionId);
+  }
+  
+  async getNetworkLogs(sessionId: string, includeHeaders?: boolean) {
+    return this.advancedController.getNetworkLogs(sessionId, includeHeaders);
+  }
+  
+  async getPerformanceMetrics(sessionId: string) {
+    return this.advancedController.getPerformanceMetrics(sessionId);
+  }
+  
+  async runAccessibilityAudit(sessionId: string, selector?: string) {
+    return this.advancedController.runAccessibilityAudit(sessionId, selector);
+  }
+  
+  // Request interception
+  private async enableRequestInterception(sessionId: string, page: Page): Promise<void> {
+    if (this.interceptedSessions.has(sessionId)) return;
+    
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      const domain = new URL(url).hostname;
+      
+      // Block requests to blacklisted domains
+      if (this.securityConfig.blockedDomains.some(blocked => domain.includes(blocked))) {
+        monitoring.auditLog({
+          level: 'warn',
+          sessionId,
+          action: 'request_blocked',
+          details: { url, domain, reason: 'blocked_domain' }
+        });
+        route.abort();
+        return;
+      }
+      
+      // Log all requests if metrics enabled
+      if (this.securityConfig.enableMetrics) {
+        monitoring.auditLog({
+          level: 'debug',
+          sessionId,
+          action: 'request_intercepted',
+          details: { url, method: route.request().method() }
+        });
+      }
+      
+      route.continue();
+    });
+    
+    this.interceptedSessions.add(sessionId);
+  }
+  
   async cleanup(): Promise<void> {
     // Clear the cleanup interval
     if (this.cleanupInterval) {
@@ -494,7 +638,15 @@ export class BrowserController {
       this.cleanupInterval = undefined;
     }
     
+    // Clean up advanced controller
+    for (const sessionId of this.sessions.keys()) {
+      await this.advancedController.cleanup(sessionId);
+    }
+    
     // Close all sessions
     await this.closeAllSessions();
+    
+    // Cleanup monitoring
+    await monitoring.cleanup();
   }
 }
